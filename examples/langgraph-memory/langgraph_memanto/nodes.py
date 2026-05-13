@@ -58,12 +58,13 @@ class MemantoRememberTool:
         "Required args: memory_type, title, content, confidence, tags."
     )
 
-    def invoke(self, tool_input: str | Dict) -> str:
+    def invoke(self, tool_input: str | Dict, agent_id: str = "langgraph-default") -> str:
         if isinstance(tool_input, str):
             data = json.loads(tool_input)
         else:
             data = tool_input
-        state = {}
+        # Pass agent_id in state so memanto_remember uses the correct namespace
+        state = {"memanto_agent_id": agent_id}
         result = _memanto_remember(
             state=state,
             api_key=MOORCHEH_API_KEY,
@@ -125,7 +126,7 @@ def research_agent(state: Dict[str, Any]) -> Dict[str, Any]:
     for tc in tool_calls:
         if tc.get("name") == "memanto_remember":
             args = tc.get("args", {})
-            result = _memanto_tool.invoke(args)
+            result = _memanto_tool.invoke(args, agent_id=agent_id)
             tool_results.append({"role": "tool", "content": result, "name": "memanto_remember"})
             title = args.get("title", "unknown")
             findings.append(title)
