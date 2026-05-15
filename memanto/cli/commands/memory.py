@@ -238,7 +238,8 @@ def upload(
 @app.command()
 def recall(
     query: str | None = typer.Argument(
-        None, help="Search query (optional for --changed-since)"
+        None,
+        help="Search query (omit when using --as-of, --changed-since, or --recent)",
     ),
     limit: int | None = typer.Option(
         None, "--limit", "-n", help="Maximum number of results"
@@ -262,6 +263,11 @@ def recall(
         "--changed-since",
         help="Differential query: What changed since this date? (ISO format)",
     ),
+    recent: bool = typer.Option(
+        False,
+        "--recent",
+        help="Chronological query: return the most recently stored memories (newest first). No search query needed.",
+    ),
 ):
     """Search and retrieve memories for the active agent with temporal query support."""
     start = time.perf_counter()
@@ -273,19 +279,19 @@ def recall(
         )
 
     # Check for mutually exclusive temporal flags
-    temporal_flags = [as_of, changed_since]
+    temporal_flags = [as_of, changed_since, recent]
     temporal_count = sum(1 for flag in temporal_flags if flag)
     if temporal_count > 1:
         _error(
             "Cannot use multiple temporal query modes together.",
-            hint="Use only one of: --as-of, --changed-since",
+            hint="Use only one of: --as-of, --changed-since, --recent",
         )
 
     # Temporal queries list memories directly and don't take a query argument.
-    if query and (as_of or changed_since):
+    if query and (as_of or changed_since or recent):
         _error(
             "Cannot provide a search query with temporal flags.",
-            hint="Temporal queries (--as-of, --changed-since) list all memories for that time. Remove the search query to continue.",
+            hint="Temporal queries (--as-of, --changed-since, --recent) list memories directly. Remove the search query to continue.",
         )
 
     client = get_client()
@@ -339,6 +345,13 @@ def recall(
                     type=type,
                 )
                 temporal_mode = "changed_since"
+            elif recent:
+                results = client.recall_recent(
+                    agent_id=agent_id,
+                    limit=limit,
+                    type=type,
+                )
+                temporal_mode = "recent"
             elif query:
                 # Standard recall
                 results = client.recall(
@@ -367,6 +380,7 @@ def recall(
         mode_labels = {
             "as_of": f"Point-in-time (as of {as_of})",
             "changed_since": f"Differential (since {changed_since})",
+            "recent": "Recent (newest first)",
             "standard": "Standard search",
         }
         mode_label = mode_labels.get(temporal_mode, "Standard search")
