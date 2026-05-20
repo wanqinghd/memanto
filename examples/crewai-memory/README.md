@@ -52,7 +52,7 @@ python run_contradiction.py
 ```text
 examples/crewai-memory/
 ├── README.md              # This file
-├── requirements.txt       # Python dependencies (includes memanto-crewai)
+├── requirements.txt       # Python dependencies (includes crewai-memanto)
 ├── .env.example           # API key template
 ├── agents.py              # Research Agent + Writer Agent definitions
 ├── tasks.py               # Task definitions
