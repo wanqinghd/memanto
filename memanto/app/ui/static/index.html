@@ -1103,6 +1103,7 @@
                     <button class="tab active" data-tab="remember">Remember</button>
                     <button class="tab" data-tab="ask">Answer (RAG)</button>
                     <button class="tab" data-tab="recall">Recall</button>
+                    <button class="tab" data-tab="upload">Upload File</button>
                 </div>
                 <!-- Remember -->
                 <div class="panel pg-tab active" id="tab-remember">
@@ -1177,6 +1178,17 @@
                     <button class="btn btn-primary" onclick="doRecall()" style="margin-bottom:16px">Search
                         Memories</button>
                     <div id="recallResults"></div>
+                </div>
+                <!-- Upload File -->
+                <div class="panel pg-tab" id="tab-upload">
+                    <div class="form-group"><label>File</label><input type="file" id="uplFile"
+                            accept=".pdf,.docx,.xlsx,.json,.txt,.csv,.md"></div>
+                    <p style="color:var(--text-dim);font-size:12px;margin:-4px 0 16px">
+                        Uploaded to the active agent's memory namespace. Supported: .pdf, .docx, .xlsx, .json,
+                        .txt, .csv, .md (max 5GB). Moorcheh extracts the text and makes it searchable via Recall &amp; Answer.
+                    </p>
+                    <button class="btn btn-primary" id="btnUpload" onclick="doUpload()">Upload to Memory</button>
+                    <div id="uploadResult" style="margin-top:16px"></div>
                 </div>
             </section>
 
@@ -1677,6 +1689,61 @@
                 if (!mems.length) { box.innerHTML = '<p style="color:var(--text-dim);padding:20px">No memories found</p>'; return; }
                 box.innerHTML = buildMemoryTable(mems);
             } catch (e) { box.innerHTML = `<p style="color:var(--error);padding:20px">Error: ${e.message}</p>`; }
+        }
+
+        // ================================================================
+        // PLAYGROUND - UPLOAD FILE
+        // ================================================================
+        const UPLOAD_EXTENSIONS = ['.pdf', '.docx', '.xlsx', '.json', '.txt', '.csv', '.md'];
+        const MAX_UPLOAD_BYTES = 5 * 1024 * 1024 * 1024; // 5GB — mirrors the backend/SDK limit
+
+        async function doUpload() {
+            if (!S.agentId || !S.token) { toast('No active agent/session. Activate an agent first.', 'error'); return; }
+            const input = document.getElementById('uplFile');
+            const file = input.files && input.files[0];
+            if (!file) { toast('Choose a file to upload', 'error'); return; }
+            const ext = file.name.includes('.') ? file.name.slice(file.name.lastIndexOf('.')).toLowerCase() : '';
+            if (!UPLOAD_EXTENSIONS.includes(ext)) {
+                toast(`Unsupported file type "${ext}". Allowed: ${UPLOAD_EXTENSIONS.join(', ')}`, 'error');
+                return;
+            }
+            if (file.size > MAX_UPLOAD_BYTES) {
+                toast('File exceeds the 5GB upload limit', 'error');
+                return;
+            }
+
+            const fd = new FormData();
+            fd.append('file', file);
+            // Multipart upload bypasses the JSON api() helper so the browser can set
+            // the multipart boundary itself — only the auth headers are forwarded.
+            const headers = {};
+            if (S.apiKey) headers['Authorization'] = `Bearer ${S.apiKey}`;
+            if (S.token) headers['X-Session-Token'] = S.token;
+
+            const btn = document.getElementById('btnUpload');
+            const out = document.getElementById('uploadResult');
+            btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Uploading...';
+            out.innerHTML = '';
+            try {
+                const res = await fetch(`/api/v2/agents/${S.agentId}/upload-file`, { method: 'POST', headers, body: fd });
+                const data = await res.json().catch(() => ({ detail: res.statusText }));
+                if (!res.ok) {
+                    let msg = data.detail || res.statusText;
+                    if (typeof msg === 'object') msg = JSON.stringify(msg);
+                    throw new Error(msg);
+                }
+                // Backend can return HTTP 200 with status:"failed" if Moorcheh rejects the file.
+                if (data.status !== 'uploaded') {
+                    throw new Error(data.message || `Upload failed with status "${data.status || 'unknown'}"`);
+                }
+                toast(`Uploaded "${data.file_name}" to ${data.agent_id}`);
+                out.innerHTML = `<p style="color:var(--success)">✓ ${escHtml(data.file_name)} (${data.status})${data.message ? ' — ' + escHtml(data.message) : ''}</p>`;
+                input.value = '';
+            } catch (e) {
+                toast('Upload failed: ' + e.message, 'error');
+                out.innerHTML = `<p style="color:var(--error)">Error: ${escHtml(e.message)}</p>`;
+            }
+            btn.disabled = false; btn.innerHTML = 'Upload to Memory';
         }
 
         // ================================================================
