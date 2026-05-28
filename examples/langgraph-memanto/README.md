@@ -45,7 +45,7 @@ python demo.py
 
 ### Expected Output
 
-```
+```text
 --------------------------------------------------
  🌙 SESSION 1: The User Provides Information
 --------------------------------------------------

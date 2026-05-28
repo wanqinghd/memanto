@@ -37,8 +37,8 @@ def main():
         client.create_agent(agent_id=agent_id, description="LangGraph cross-session memory agent")
         client.activate_agent(agent_id=agent_id)
     except Exception as e:
-        print(f"Error creating agent: {e}")
-        pass
+        print(f"❌ Error creating or activating agent '{agent_id}': {e}")
+        sys.exit(1)
 
     tools = create_memanto_tools(client, agent_id)
     graph = build_graph(tools)
