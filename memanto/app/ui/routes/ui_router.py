@@ -187,6 +187,56 @@ async def list_conflicts(agent_id: str | None = None, date: str | None = None):
         return {"conflicts": [], "count": 0, "error": str(e)}
 
 
+@router.get("/api/ui/conflict-scans")
+async def list_conflict_scans(agent_id: str | None = None):
+    """
+    Return, per day, when the conflict scan last ran for an agent.
+
+    The scan time is the mtime of the per-day conflicts JSON, which is
+    (re)written on every scan and every resolution. The UI uses this to flag
+    days whose memories were stored after the last scan (possibly unreviewed).
+    """
+    import json
+    import re
+    from datetime import datetime as dt
+
+    if not agent_id:
+        aid, _ = _config_manager.get_active_session()
+        if not aid:
+            return {"scans": {}, "agent_id": None}
+        agent_id = aid
+
+    conflicts_dir = Path.home() / ".memanto" / "conflicts"
+    scans: dict[str, dict] = {}
+    if conflicts_dir.exists():
+        suffix = "_conflicts.json"
+        date_re = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+        for path in conflicts_dir.glob(f"{agent_id}_*{suffix}"):
+            # The date is the 10 chars before the fixed suffix — robust to
+            # underscores inside agent_id.
+            date = path.name[: -len(suffix)][-10:]
+            if not date_re.match(date):
+                continue
+            try:
+                with open(path, encoding="utf-8") as f:
+                    conflicts = json.load(f)
+            except (json.JSONDecodeError, OSError):
+                continue
+            if not isinstance(conflicts, list):
+                conflicts = []
+            # astimezone() stamps the local offset so the browser compares it
+            # as an absolute instant against memory created_at (no TZ skew).
+            scanned_at = dt.fromtimestamp(path.stat().st_mtime).astimezone().isoformat()
+            scans[date] = {
+                "scanned_at": scanned_at,
+                "conflict_count": len(conflicts),
+                "unresolved_count": sum(
+                    1 for c in conflicts if not c.get("resolved", False)
+                ),
+            }
+    return {"scans": scans, "agent_id": agent_id}
+
+
 @router.get("/api/ui/daily-summary")
 async def read_daily_summary(agent_id: str | None = None, date: str | None = None):
     """

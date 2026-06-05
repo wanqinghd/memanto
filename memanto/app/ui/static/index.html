@@ -1500,6 +1500,23 @@
             outline-offset: 1px;
         }
 
+        .hh-cell.stale {
+            position: relative;
+        }
+
+        .hh-cell.stale::after {
+            content: '';
+            position: absolute;
+            top: -2px;
+            right: -2px;
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background: var(--error);
+            box-shadow: 0 0 0 1px rgba(13, 17, 23, 0.85);
+            pointer-events: none;
+        }
+
         .hh-legend {
             display: flex;
             align-items: center;
@@ -2398,8 +2415,16 @@
             try {
                 const data = await api('GET', '/api/ui/conflicts');
                 const badge = document.getElementById('conflictBadge');
+                await fetchConflictScans();
+                await fetchRecentMemories();
+                const staleToday = staleMemCountForDay(todayKey());
                 if (data.count > 0) {
                     badge.textContent = data.count;
+                    badge.title = `${data.count} unresolved conflict(s) today`;
+                    badge.style.display = 'inline-flex';
+                } else if (staleToday > 0) {
+                    badge.textContent = '!';
+                    badge.title = `${staleToday} ${staleToday === 1 ? 'memory' : 'memories'} stored since the last conflict scan — run Detect Conflicts`;
                     badge.style.display = 'inline-flex';
                 } else {
                     badge.style.display = 'none';
@@ -2655,6 +2680,7 @@
                 document.getElementById('remContent').value = '';
                 document.getElementById('remTitle').value = '';
                 document.getElementById('remTags').value = '';
+                loadConflictBadge();
             } catch (e) { toast('Failed: ' + e.message, 'error'); }
             btn.disabled = false; btn.innerHTML = 'Store Memory';
         }
@@ -2890,6 +2916,40 @@
             return 4;
         }
 
+        // How many of a day's memories were stored after the last conflict
+        // scan for that day (0 = nothing unreviewed). A day with memories but
+        // no scan counts all of them as unreviewed. Reads S.history +
+        // S.conflictScans, so callers must populate both first.
+        function staleMemCountForDay(key) {
+            const mems = (S.history || []).filter(m => {
+                const d = parseMemDate(m.created_at);
+                return d && dayKey(d) === key;
+            });
+            if (!mems.length) return 0;
+            const scan = (S.conflictScans || {})[key];
+            const scanned = scan ? Date.parse(scan.scanned_at) : NaN;
+            if (isNaN(scanned)) return mems.length;
+            return mems.filter(m => {
+                const d = parseMemDate(m.created_at);
+                return d && d.getTime() > scanned;
+            }).length;
+        }
+
+        async function fetchConflictScans() {
+            try {
+                const r = await api('GET', '/api/ui/conflict-scans');
+                S.conflictScans = r.scans || {};
+            } catch { S.conflictScans = S.conflictScans || {}; }
+        }
+
+        async function fetchRecentMemories() {
+            if (!S.agentId || !S.token) return;
+            try {
+                const res = await api('POST', `/api/v2/agents/${S.agentId}/recall/recent`, { limit: 100 });
+                S.history = res.memories || [];
+            } catch { }
+        }
+
         async function loadHistory() {
             const box = document.getElementById('historyContent');
             if (!S.agentId || !S.token) {
@@ -2900,6 +2960,7 @@
             try {
                 const res = await api('POST', `/api/v2/agents/${S.agentId}/recall/recent`, { limit: 100 });
                 S.history = res.memories || [];
+                await fetchConflictScans();
                 // Preserve any pre-set filter/summary state (e.g. dashboard
                 // navigated here with a specific day pre-selected).
                 renderHistory();
@@ -2987,9 +3048,17 @@
                     <div class="hh-months"><span></span>${monthLabels.map(l => `<span>${l}</span>`).join('')}</div>
                     <div class="hh-grid-wrap">
                         <div class="hh-day-labels"><span></span><span>Mon</span><span></span><span>Wed</span><span></span><span>Fri</span><span></span></div>
-                        <div class="hh-weeks">${weeks.map(week => week.map(d => `<div class="hh-cell${S.historyFilter === d.key ? ' selected' : ''}" data-level="${levelForCount(d.count)}" data-key="${d.key}" title="${d.count} ${d.count === 1 ? 'memory' : 'memories'} on ${d.date.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}" onclick="filterHistoryByDay('${d.key}')"></div>`).join('')).join('')}</div>
+                        <div class="hh-weeks">${weeks.map(week => week.map(d => {
+                            const stale = staleMemCountForDay(d.key);
+                            const dayLabel = d.date.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+                            const title = `${d.count} ${d.count === 1 ? 'memory' : 'memories'} on ${dayLabel}${stale ? ` • ${stale} stored since last conflict scan — may have unreviewed conflicts` : ''}`;
+                            return `<div class="hh-cell${S.historyFilter === d.key ? ' selected' : ''}${stale ? ' stale' : ''}" data-level="${levelForCount(d.count)}" data-key="${d.key}" title="${title}" onclick="filterHistoryByDay('${d.key}')"></div>`;
+                        }).join('')).join('')}</div>
                     </div>
                     <div class="hh-legend">
+                        <span class="hh-cell stale" data-level="2" title="Memories were stored on this day after the last conflict scan — possibly unreviewed"></span>
+                        <span>Stored since last conflict scan — may contain unreviewed conflicts</span>
+                        <span style="flex:1"></span>
                         <span>Less</span>
                         <span class="hh-cell" data-level="0"></span>
                         <span class="hh-cell" data-level="1"></span>
@@ -3457,8 +3526,10 @@
                 } else {
                     toast(`Conflict detection finished with status: ${status}`, 'warning');
                 }
-                await loadConflicts();
-                if (typeof loadConflictBadge === 'function') loadConflictBadge();
+                // Scan rewrites the conflict file (mtime advances or file is
+                // newly created). Refresh scans + history so the History dot
+                // clears and the Conflicts banner re-renders.
+                await invalidateConflictState();
             } catch (e) {
                 toast('Failed to detect conflicts: ' + e.message, 'error');
             } finally {
@@ -3473,9 +3544,21 @@
             try {
                 const data = await api('GET', '/api/ui/conflicts');
                 const conflicts = data.conflicts || [];
+                await fetchConflictScans();
+                await fetchRecentMemories();
+
+                const scanDate = data.date || todayKey();
+                const scan = (S.conflictScans || {})[scanDate];
+                const staleCount = staleMemCountForDay(scanDate);
+                let banner = '';
+                if (staleCount > 0) {
+                    banner = `<div style="background:rgba(239,68,68,0.12);border:1px solid var(--error);border-radius:8px;padding:12px 14px;margin-bottom:16px;font-size:13px;color:var(--text-secondary)">⚠ <strong style="color:var(--error)">${staleCount} ${staleCount === 1 ? 'memory' : 'memories'}</strong> stored since the last conflict scan${scan ? ` (${fmtDate(scan.scanned_at)})` : ' — this day has never been scanned'} for ${scanDate}. Click <strong>Detect Conflicts Now</strong> to re-check.</div>`;
+                } else if (scan) {
+                    banner = `<div style="color:var(--text-dim);font-size:12px;margin-bottom:16px">Last conflict scan for ${scanDate}: ${fmtDate(scan.scanned_at)}.</div>`;
+                }
 
                 if (!conflicts.length) {
-                    container.innerHTML = `
+                    container.innerHTML = banner + `
                 <div style="text-align:center;padding:60px 20px">
                     <div style="font-size:48px;margin-bottom:16px;opacity:0.3">✓</div>
                     <p style="color:var(--success);font-size:16px;font-weight:600;margin-bottom:8px">No Conflicts</p>
@@ -3484,7 +3567,7 @@
                     return;
                 }
 
-                let html = `<p style="color:var(--text-secondary);margin-bottom:20px;font-size:13px">Found <strong style="color:var(--warning)">${conflicts.length}</strong> unresolved conflict(s) for <strong style="color:var(--accent)">${data.agent_id}</strong> on ${data.date}</p>`;
+                let html = banner + `<p style="color:var(--text-secondary);margin-bottom:20px;font-size:13px">Found <strong style="color:var(--warning)">${conflicts.length}</strong> unresolved conflict(s) for <strong style="color:var(--accent)">${data.agent_id}</strong> on ${data.date}</p>`;
 
                 conflicts.forEach((c, i) => {
                     const ctype = (c.type || 'conflict').toUpperCase();
@@ -3559,8 +3642,24 @@
                 card.style.pointerEvents = 'none';
                 card.querySelector('.conflict-header .badge').className = 'badge badge-success';
                 card.querySelector('.conflict-header .badge').textContent = 'Resolved';
-                loadConflictBadge();
+                // Resolve rewrites the conflict file (mtime advances). Refresh
+                // the scan map + history cache so the History dot and the
+                // Conflicts "Last scan" banner reflect the new state.
+                await invalidateConflictState();
             } catch (e) { toast('Resolution failed: ' + e.message, 'error'); }
+        }
+
+        // Called after any operation that mutates conflict files (detect, resolve).
+        // Refreshes shared state and re-renders any visible page that depends on it.
+        async function invalidateConflictState() {
+            await fetchConflictScans();
+            await fetchRecentMemories();
+            loadConflictBadge();
+            if (S._historyLoaded) renderHistory();
+            const conflictsPage = document.getElementById('page-conflicts');
+            if (conflictsPage && conflictsPage.classList.contains('active')) {
+                loadConflicts();
+            }
         }
 
         // ================================================================
