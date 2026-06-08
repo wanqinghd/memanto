@@ -187,6 +187,166 @@ async def list_conflicts(agent_id: str | None = None, date: str | None = None):
         return {"conflicts": [], "count": 0, "error": str(e)}
 
 
+@router.get("/api/ui/conflict-scans")
+async def list_conflict_scans(agent_id: str | None = None):
+    """
+    Return, per day, when the conflict scan last ran for an agent.
+
+    The scan time is the mtime of the per-day conflicts JSON, which is
+    (re)written on every scan and every resolution. The UI uses this to flag
+    days whose memories were stored after the last scan (possibly unreviewed).
+    """
+    import json
+    import re
+    from datetime import datetime as dt
+
+    if not agent_id:
+        aid, _ = _config_manager.get_active_session()
+        if not aid:
+            return {"scans": {}, "agent_id": None}
+        agent_id = aid
+
+    conflicts_dir = Path.home() / ".memanto" / "conflicts"
+    scans: dict[str, dict] = {}
+    if conflicts_dir.exists():
+        suffix = "_conflicts.json"
+        date_re = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+        for path in conflicts_dir.glob(f"{agent_id}_*{suffix}"):
+            # The date is the 10 chars before the fixed suffix — robust to
+            # underscores inside agent_id.
+            date = path.name[: -len(suffix)][-10:]
+            if not date_re.match(date):
+                continue
+            try:
+                with open(path, encoding="utf-8") as f:
+                    conflicts = json.load(f)
+            except (json.JSONDecodeError, OSError):
+                continue
+            if not isinstance(conflicts, list):
+                conflicts = []
+            # astimezone() stamps the local offset so the browser compares it
+            # as an absolute instant against memory created_at (no TZ skew).
+            scanned_at = dt.fromtimestamp(path.stat().st_mtime).astimezone().isoformat()
+            scans[date] = {
+                "scanned_at": scanned_at,
+                "conflict_count": len(conflicts),
+                "unresolved_count": sum(
+                    1 for c in conflicts if not c.get("resolved", False)
+                ),
+            }
+    return {"scans": scans, "agent_id": agent_id}
+
+
+@router.get("/api/ui/daily-summary")
+async def read_daily_summary(agent_id: str | None = None, date: str | None = None):
+    """
+    Return the existing daily summary for an agent/date if one was already
+    generated. Does NOT trigger generation — that's the POST endpoint.
+
+    Response: {exists, agent_id, date, path, content}
+    """
+    from datetime import datetime as dt
+
+    from memanto.app.config import get_data_dir
+
+    if not agent_id:
+        aid, _ = _config_manager.get_active_session()
+        if not aid:
+            return {"exists": False, "message": "No active agent"}
+        agent_id = aid
+    if not date:
+        date = dt.now().strftime("%Y-%m-%d")
+
+    path = get_data_dir() / "summaries" / f"{agent_id}_{date}.md"
+    if not path.exists():
+        return {
+            "exists": False,
+            "agent_id": agent_id,
+            "date": date,
+            "path": str(path),
+        }
+    try:
+        content = path.read_text(encoding="utf-8")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read summary: {e}")
+    return {
+        "exists": True,
+        "agent_id": agent_id,
+        "date": date,
+        "path": str(path),
+        "content": content,
+    }
+
+
+@router.post("/api/ui/daily-summary")
+async def generate_daily_summary(body: dict | None = None):
+    """
+    Trigger an on-demand daily summary for the active agent.
+    Expects (optional): {"agent_id": "...", "date": "YYYY-MM-DD",
+                         "output_path": "..."}
+    """
+    from datetime import datetime as dt
+
+    body = body or {}
+    agent_id = body.get("agent_id")
+    if not agent_id:
+        aid, _ = _config_manager.get_active_session()
+        if not aid:
+            raise HTTPException(status_code=400, detail="No active agent")
+        agent_id = aid
+    date = body.get("date") or dt.now().strftime("%Y-%m-%d")
+    output_path = body.get("output_path")
+
+    api_key = _config_manager.get_api_key()
+    if not api_key:
+        raise HTTPException(status_code=400, detail="No API key configured")
+
+    try:
+        client = DirectClient(api_key)
+        _, token = _config_manager.get_active_session()
+        if token:
+            client.session_token = token
+        result = client.generate_daily_summary(
+            agent_id=str(agent_id), date=str(date), output_path=output_path
+        )
+        return {"agent_id": agent_id, "date": date, **result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/api/ui/conflicts/generate")
+async def generate_conflict_report(body: dict | None = None):
+    """
+    Trigger an on-demand conflict report for the active agent. This is the
+    same work the scheduled task performs.
+    Expects (optional): {"agent_id": "...", "date": "YYYY-MM-DD"}
+    """
+    from datetime import datetime as dt
+
+    body = body or {}
+    agent_id = body.get("agent_id")
+    if not agent_id:
+        aid, _ = _config_manager.get_active_session()
+        if not aid:
+            raise HTTPException(status_code=400, detail="No active agent")
+        agent_id = aid
+    date = body.get("date") or dt.now().strftime("%Y-%m-%d")
+
+    api_key = _config_manager.get_api_key()
+    if not api_key:
+        raise HTTPException(status_code=400, detail="No API key configured")
+
+    try:
+        client = DirectClient(api_key)
+        _, token = _config_manager.get_active_session()
+        if token:
+            client.session_token = token
+        result = client.generate_conflict_report(agent_id=str(agent_id), date=str(date))
+        return {"agent_id": agent_id, "date": date, **result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/api/ui/conflicts/resolve")
 async def resolve_conflict(body: dict):
     """
