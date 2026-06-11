@@ -207,6 +207,12 @@ By default, call the endpoints on your local server (for example: `"http://127.0
 
 ---
 
+## 📦 SDKs
+
+- **TypeScript / Node.js** — [`@moorcheh-ai/memanto`](sdks/typescript) — boots a local Memanto server via `uvx` and exposes an ergonomic `Memanto` client (`remember` / `recall` / `answer`).
+
+---
+
 ## 🤖 Why Moorcheh?
 
 **Moorcheh.ai** - The world's **only no-indexing semantic database**.
