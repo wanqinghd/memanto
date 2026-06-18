@@ -5,7 +5,7 @@
 </p>
 
 <div align="center">
-  <h1>Your agent forgets everything. Memanto fixes that.</h1>
+  <h1>Your agents focus. Memanto remembers.</h1>
 </div>
 
 <p align="center">
@@ -13,7 +13,7 @@
 </p>
 
 <h1 align="center">
-  <em>Memory that AI Agents Love!</em>
+  <em>A companion memory agent with its own intelligence that keeps your agents focused on their tasks.</em>
 </h1>
 
 <p align="center">

@@ -599,7 +599,7 @@ def main_callback(
         is_eager=True,
     ),
 ):
-    """MEMANTO CLI - Memory that AI Agents Love!"""
+    """MEMANTO CLI - Your agents focus. Memanto remembers."""
     if ctx.invoked_subcommand is None:
         # Print logo
         print_logo()
@@ -630,7 +630,7 @@ def status():
     console.print(
         Panel.fit(
             f"[{BOLD_PRIMARY}]MEMANTO Status Dashboard[/{BOLD_PRIMARY}]\n"
-            f"Memory that AI Agents Love!  •  v{memanto_version}",
+            f"Your agents focus. Memanto remembers.  •  v{memanto_version}",
             border_style=PRIMARY,
         )
     )
