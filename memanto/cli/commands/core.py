@@ -139,6 +139,23 @@ def _cloud_setup() -> None:
     console.print()
 
 
+def _prompt_onprem_setup_mode() -> bool:
+    """Ask user for setup mode. Returns True for Quick Setup, False for Choose Models."""
+    console.print()
+    console.print(f"[{BOLD_BRIGHT}]On-Prem Setup Mode[/{BOLD_BRIGHT}]")
+    console.print(
+        f"  [{BRIGHT}]1[/{BRIGHT}]  Quick Setup  "
+        f"[dim]- Ollama with nomic-embed-text (embedding) + qwen2.5 (LLM), zero config[/dim]"
+    )
+    console.print(
+        f"  [{BRIGHT}]2[/{BRIGHT}]  Choose Models  "
+        f"[dim]- pick your own embedding and LLM providers[/dim]"
+    )
+    choice = typer.prompt("  Enter 1 or 2", default="1")
+    console.print()
+    return str(choice).strip() == "1"
+
+
 def _onprem_setup() -> None:
     """On-prem branch: install moorcheh-client if missing, configure, start."""
     console.print(
@@ -153,29 +170,43 @@ def _onprem_setup() -> None:
     _ensure_docker_available()
     _ensure_moorcheh_client_installed()
 
-    # Embedding model is a one-time choice (set on first on-prem onboarding).
-    # On subsequent runs — e.g., switching cloud→on-prem after having previously
-    # onboarded on-prem — reuse what state.json already has and recover the
-    # api_key from ~/.moorcheh/config.json. Skipping this would force the user
-    # to re-pick the same provider/model on every backend swap.
     existing_state = config_manager.get_onprem_state()
-    if existing_state.get("embedding_provider") and existing_state.get(
-        "embedding_model"
+    if (
+        existing_state.get("embedding_provider")
+        and existing_state.get("embedding_model")
+        and existing_state.get("llm_provider")
+        and existing_state.get("llm_model")
     ):
         embedding_provider = existing_state["embedding_provider"]
         embedding_model = existing_state["embedding_model"]
         embedding_key = _recover_moorcheh_api_key("embedding", embedding_provider)
+        llm_provider = existing_state["llm_provider"]
+        llm_model = existing_state["llm_model"]
+        llm_key = _recover_moorcheh_api_key("llm", llm_provider)
         console.print(
-            f"[dim]  Reusing embedding from previous on-prem setup: "
-            f"{embedding_provider} / {embedding_model}[/dim]"
+            f"[dim]  Reusing previous on-prem setup: "
+            f"{embedding_provider} / {embedding_model} + {llm_provider} / {llm_model}[/dim]"
         )
     else:
-        embedding_provider, embedding_model, embedding_key = (
-            _prompt_embedding_provider()
-        )
-    llm_provider, llm_model, llm_key = _prompt_llm_provider(
-        embedding_provider, embedding_key
-    )
+        quick_setup = _prompt_onprem_setup_mode()
+        if quick_setup:
+            embedding_provider, embedding_model, embedding_key = (
+                "ollama",
+                "nomic-embed-text",
+                "",
+            )
+            llm_provider, llm_model, llm_key = "ollama", "qwen2.5", ""
+            console.print(
+                "[dim]  Quick Setup: Ollama with nomic-embed-text "
+                "(embedding) + qwen2.5 (LLM)[/dim]"
+            )
+        else:
+            embedding_provider, embedding_model, embedding_key = (
+                _prompt_embedding_provider()
+            )
+            llm_provider, llm_model, llm_key = _prompt_llm_provider(
+                embedding_provider, embedding_key
+            )
     # Write the FULL config (embedding + LLM) to ~/.moorcheh/config.json BEFORE
     # `moorcheh up`, so the server reads the complete config on first boot and
     # we don't have to bounce the stack. `moorcheh up` itself only knows
@@ -191,12 +222,13 @@ def _onprem_setup() -> None:
     )
     _moorcheh_up_and_wait(embedding_provider, embedding_model, embedding_key)
 
-    # Pull any Ollama models needed (embedding and/or LLM) inside the
-    # container started by `moorcheh up`.
+    # Pull any Ollama models needed (embedding and/or LLM). `moorcheh up` uses
+    # native host Ollama when one is running and a bundled container otherwise;
+    # _pull_ollama_model handles both.
     if embedding_provider == "ollama":
-        _pull_ollama_model_in_container(embedding_model)
+        _pull_ollama_model(embedding_model)
     if llm_provider == "ollama" and llm_model != embedding_model:
-        _pull_ollama_model_in_container(llm_model)
+        _pull_ollama_model(llm_model)
 
     # Persist everything on-prem in ~/.memanto/on-prem/state.json — the
     # shared ~/.memanto/config.yaml belongs to the cloud backend; on-prem
@@ -287,12 +319,12 @@ def _prompt_embedding_provider() -> tuple[str, str, str]:
             _error(f"{provider.title()} API key cannot be empty.")
         return provider, model, key.strip()
 
-    # Ollama: no native install needed. `moorcheh up` starts Ollama in a
-    # container; we pull the embedding model inside that container after the
-    # server is healthy (see _pull_ollama_model_in_container).
+    # Ollama: no native install needed. `moorcheh up` reuses a native Ollama if
+    # one is already running, otherwise it starts a bundled container. We pull
+    # the embedding model once the server is healthy (see _pull_ollama_model).
     console.print(
-        "[dim]  Ollama will be started in a container by `moorcheh up`. "
-        "The embedding model will be pulled into that container.[/dim]"
+        "[dim]  `moorcheh up` will reuse a running Ollama or start one in a "
+        "container. The embedding model will be pulled automatically.[/dim]"
     )
     return "ollama", "nomic-embed-text", ""
 
@@ -434,9 +466,35 @@ def _persist_moorcheh_llm_config(
         _error(f"Failed to persist LLM config: {e}")
 
 
+def _pull_ollama_model(model: str) -> None:
+    """Pull an Ollama model after ``moorcheh up`` started the stack.
+
+    ``moorcheh up`` reuses a native Ollama already running on the host and only
+    starts a bundled container when none is reachable. In both cases the Ollama
+    HTTP API is exposed on the host at 127.0.0.1:11434 (the bundled container
+    publishes the port), so pull over HTTP when reachable and only fall back to
+    ``docker exec`` for a bundled container we can't reach over HTTP.
+    """
+    try:
+        from moorcheh.ollama_setup import ollama_is_reachable, pull_ollama_model_http
+    except ImportError:
+        ollama_is_reachable = None
+
+    if ollama_is_reachable is not None and ollama_is_reachable():
+        console.print(f"[dim]  Pulling {model} into Ollama (127.0.0.1:11434)...[/dim]")
+        try:
+            pull_ollama_model_http(model)
+        except Exception as e:
+            _error(f"Failed to pull Ollama model {model}: {e}")
+        console.print(f"[green]  ✓ Ollama model {model} ready[/green]")
+        return
+
+    _pull_ollama_model_in_container(model)
+
+
 def _pull_ollama_model_in_container(model: str) -> None:
-    """After ``moorcheh up`` started the stack, pull the embedding model
-    inside the Ollama container via ``docker exec``.
+    """Pull an Ollama model inside the bundled Ollama container via
+    ``docker exec`` (fallback when the host HTTP API is not reachable).
 
     Looks for a running container with image ``ollama/ollama``; falls back to
     name-match. Errors clearly with a manual command if we can't locate it.
@@ -469,8 +527,8 @@ def _pull_ollama_model_in_container(model: str) -> None:
     try:
         subprocess.check_call(["docker", "exec", container_id, "ollama", "pull", model])
     except subprocess.CalledProcessError as e:
-        _error(f"Failed to pull embedding model inside container: {e}")
-    console.print("[green]  ✓ Embedding model ready in container[/green]")
+        _error(f"Failed to pull model {model} inside container: {e}")
+    console.print(f"[green]  ✓ Ollama model {model} ready in container[/green]")
 
 
 def _moorcheh_up_and_wait(provider: str, model: str, key: str) -> None:
@@ -541,7 +599,7 @@ def main_callback(
         is_eager=True,
     ),
 ):
-    """MEMANTO CLI - Memory that AI Agents Love!"""
+    """MEMANTO CLI - Your agents focus. Memanto remembers."""
     if ctx.invoked_subcommand is None:
         # Print logo
         print_logo()
@@ -572,7 +630,7 @@ def status():
     console.print(
         Panel.fit(
             f"[{BOLD_PRIMARY}]MEMANTO Status Dashboard[/{BOLD_PRIMARY}]\n"
-            f"Memory that AI Agents Love!  •  v{memanto_version}",
+            f"Your agents focus. Memanto remembers.  •  v{memanto_version}",
             border_style=PRIMARY,
         )
     )
