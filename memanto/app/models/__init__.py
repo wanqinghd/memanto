@@ -380,3 +380,102 @@ class HealthResponse(BaseModel):
     service: str
     version: str
     moorcheh_connected: bool
+
+
+# Session-based v2 endpoint responses (typed for OpenAPI codegen)
+
+
+class MemoryItem(BaseModel):
+    """Single memory record as returned by recall/answer endpoints."""
+
+    id: str | None = None
+    title: str = ""
+    content: str = ""
+    text: str = ""
+    type: str | None = None
+    confidence: float | None = None
+    status: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    created_at: str | None = None
+    updated_at: str | None = None
+    expires_at: str | None = None
+    ttl_seconds: int | None = None
+    actor_id: str | None = None
+    source: str | None = None
+    scope_type: str | None = None
+    scope_id: str | None = None
+    score: float | None = None
+    provenance: str = "explicit_statement"
+    validation_count: int = 0
+    contradiction_detected: bool = False
+    superseded_by: str | None = None
+    supersedes: str | None = None
+    validated_at: str | None = None
+    change_type: str | None = None
+
+
+class RememberResponse(BaseModel):
+    memory_id: str
+    agent_id: str
+    session_id: str
+    namespace: str
+    status: str
+    provenance: str
+    confidence: float
+    type: str | None = None
+
+
+class BatchRememberResultItem(BaseModel):
+    id: str
+    status: str
+    action: str | None = None
+    reason: str | None = None
+    error: str | None = None
+    type: str | None = None
+
+
+class BatchRememberResponse(BaseModel):
+    agent_id: str
+    session_id: str
+    namespace: str
+    total_submitted: int
+    successful: int
+    failed: int
+    results: list[BatchRememberResultItem]
+
+
+class UploadFileResponse(BaseModel):
+    agent_id: str
+    session_id: str
+    namespace: str
+    file_name: str
+    file_size: int | None = None
+    status: str
+    message: str = ""
+
+
+class RecallResponse(BaseModel):
+    agent_id: str
+    session_id: str
+    query: str
+    memories: list[MemoryItem]
+    count: int
+
+
+class TemporalRecallResponse(BaseModel):
+    agent_id: str
+    session_id: str
+    memories: list[MemoryItem]
+    count: int
+    temporal_mode: str
+    as_of_date: str | None = None
+    since_date: str | None = None
+
+
+class AnswerResponse(BaseModel):
+    agent_id: str
+    session_id: str
+    question: str
+    answer: str
+    sources: list[Any] = Field(default_factory=list)
+    namespace: str

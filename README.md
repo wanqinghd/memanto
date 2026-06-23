@@ -206,6 +206,12 @@ Use memory types to categorize what you store so retrieval is cleaner and more c
 
 ---
 
+## 📦 SDKs
+
+- **TypeScript / Node.js** — [`@moorcheh-ai/memanto`](sdks/typescript) — boots a local Memanto server via `uvx` and exposes an ergonomic `Memanto` client (`remember` / `recall` / `answer`).
+
+---
+
 ## REST API
 
 Memanto exposes a session-based REST API for programmatic access. Start the server locally:

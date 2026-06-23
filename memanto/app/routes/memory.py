@@ -20,10 +20,16 @@ from memanto.app.config import settings
 from memanto.app.core import MemoryRecord
 from memanto.app.models import (
     AnswerRequest,
+    AnswerResponse,
     BatchRememberRequest,
+    BatchRememberResponse,
     ConflictResolveRequest,
     ExtractMemoriesRequest,
+    RecallResponse,
     RememberRequest,
+    RememberResponse,
+    TemporalRecallResponse,
+    UploadFileResponse,
 )
 from memanto.app.models.session import Session
 from memanto.app.routes.auth_deps import get_current_session, get_session_service
@@ -124,7 +130,7 @@ class RecallRecentRequest(BaseModel):
     type: list[str] | None = Field(default=None, description="Memory type filters")
 
 
-@router.post("/{agent_id}/remember")
+@router.post("/{agent_id}/remember", response_model=RememberResponse)
 async def remember(
     agent_id: str,
     request: RememberRequest = Body(...),
@@ -218,7 +224,7 @@ async def remember(
         raise map_error_to_http_exception(e)
 
 
-@router.post("/{agent_id}/batch-remember")
+@router.post("/{agent_id}/batch-remember", response_model=BatchRememberResponse)
 async def batch_remember(
     agent_id: str,
     request: BatchRememberRequest = Body(...),
@@ -399,7 +405,7 @@ async def extract_memories_from_conversation(
         raise map_error_to_http_exception(e)
 
 
-@router.post("/{agent_id}/upload-file")
+@router.post("/{agent_id}/upload-file", response_model=UploadFileResponse)
 async def upload_file(
     agent_id: str,
     file: UploadFile = File(
@@ -533,7 +539,7 @@ async def delete_memory(
         raise map_error_to_http_exception(e)
 
 
-@router.post("/{agent_id}/recall")
+@router.post("/{agent_id}/recall", response_model=RecallResponse)
 async def recall(
     agent_id: str,
     request: RecallRequest = Body(...),
@@ -608,7 +614,7 @@ async def recall(
         raise map_error_to_http_exception(e)
 
 
-@router.post("/{agent_id}/answer")
+@router.post("/{agent_id}/answer", response_model=AnswerResponse)
 async def answer(
     agent_id: str,
     request: AnswerRequest = Body(...),
@@ -867,7 +873,7 @@ async def resolve_conflict(
         raise map_error_to_http_exception(e)
 
 
-@router.post("/{agent_id}/recall/as-of")
+@router.post("/{agent_id}/recall/as-of", response_model=TemporalRecallResponse)
 async def recall_as_of(
     agent_id: str,
     request: RecallAsOfRequest = Body(...),
@@ -920,7 +926,7 @@ async def recall_as_of(
         raise map_error_to_http_exception(e)
 
 
-@router.post("/{agent_id}/recall/changed-since")
+@router.post("/{agent_id}/recall/changed-since", response_model=TemporalRecallResponse)
 async def recall_changed_since(
     agent_id: str,
     request: RecallChangedSinceRequest = Body(...),
@@ -972,7 +978,7 @@ async def recall_changed_since(
         raise map_error_to_http_exception(e)
 
 
-@router.post("/{agent_id}/recall/recent")
+@router.post("/{agent_id}/recall/recent", response_model=TemporalRecallResponse)
 async def recall_recent(
     agent_id: str,
     request: RecallRecentRequest = Body(...),
