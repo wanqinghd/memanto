@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <a href="https://discord.gg/CyxRFQSQ3p">
+  <a href="https://memanto.ai/discord">
     <img src="https://img.shields.io/badge/Join-Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Join Discord">
   </a>
   <a href="https://www.youtube.com/watch?v=vEtOaoweIG4">
@@ -246,7 +246,7 @@ Full endpoint reference is available at [docs.memanto.ai/api](https://docs.meman
 
 Have questions or feedback? We're here to help:
 - **Docs**: [https://docs.memanto.ai](https://docs.memanto.ai)
-- **Discord**: [Join our Discord server](https://discord.gg/CyxRFQSQ3p)
+- **Discord**: [Join our Discord server](https://memanto.ai/discord)
 - **Email**: support@moorcheh.ai
 - **X / Twitter**: [@moorcheh_ai](https://x.com/moorcheh_ai)
 
