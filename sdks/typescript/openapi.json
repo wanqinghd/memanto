@@ -1,9 +1,9 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Memanto - Memory that AI Agents Love!",
+    "title": "Memanto - Your agents focus. Memanto remembers.",
     "description": "A memory layer service for agentic AI systems using Moorcheh SDK",
-    "version": "0.1.4.dev132+g29f7ca7"
+    "version": "0.2.4.dev12+g0e7dd4f.d20260623"
   },
   "paths": {
     "/health": {
@@ -192,6 +192,216 @@
                 "schema": {
                   "$ref": "#/components/schemas/BatchRememberResponse"
                 }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/agents/{agent_id}/memories/{memory_id}": {
+      "patch": {
+        "tags": [
+          "Sessions & Agents",
+          "Memory Operations"
+        ],
+        "summary": "Edit Memory",
+        "description": "Update one memory in the active agent's namespace (Session-based).\n\nRequires:\n- X-Session-Token: {session_token}\n\nThe session must be for the specified agent_id.",
+        "operationId": "edit_memory_api_v2_agents__agent_id__memories__memory_id__patch",
+        "parameters": [
+          {
+            "name": "agent_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Agent Id"
+            }
+          },
+          {
+            "name": "memory_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Memory Id"
+            }
+          },
+          {
+            "name": "x-session-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Session-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemoryEditRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Sessions & Agents",
+          "Memory Operations"
+        ],
+        "summary": "Delete Memory",
+        "description": "Delete one memory from the active agent namespace.\n\nRequires:\n- X-Session-Token: {session_token}\n\nThe session must be for the specified agent_id.",
+        "operationId": "delete_memory_api_v2_agents__agent_id__memories__memory_id__delete",
+        "parameters": [
+          {
+            "name": "agent_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Agent Id"
+            }
+          },
+          {
+            "name": "memory_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Memory Id"
+            }
+          },
+          {
+            "name": "x-session-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Session-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/agents/{agent_id}/remember/extract": {
+      "post": {
+        "tags": [
+          "Sessions & Agents",
+          "Memory Operations"
+        ],
+        "summary": "Extract Memories From Conversation",
+        "description": "Extract typed memory candidates from chat-style conversation turns.\n\nRequires:\n- X-Session-Token: {session_token}\n\nWhen dry_run is true, candidates are returned without writing. Otherwise the\ncandidates are persisted through the same batch memory path used by\n/batch-remember.",
+        "operationId": "extract_memories_from_conversation_api_v2_agents__agent_id__remember_extract_post",
+        "parameters": [
+          {
+            "name": "agent_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Agent Id"
+            }
+          },
+          {
+            "name": "x-session-token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Session-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExtractMemoriesRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           },
@@ -1792,6 +2002,90 @@
         }
       }
     },
+    "/api/ui/migrate/dry-run": {
+      "post": {
+        "tags": [
+          "Web UI"
+        ],
+        "summary": "Migrate Dry Run",
+        "description": "Preview a migration without writing.\n\nBody: ``{provider, file?, api_key?}``. Returns the mapped row count,\ntype breakdown, compact savings metrics, and a small sample of the\nmapped payloads so the UI can preview what would be imported.",
+        "operationId": "migrate_dry_run_api_ui_migrate_dry_run_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "type": "object",
+                "title": "Body"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ui/migrate/import": {
+      "post": {
+        "tags": [
+          "Web UI"
+        ],
+        "summary": "Migrate Import",
+        "description": "Run an end-to-end migration.\n\nBody: ``{provider, file?, api_key?, agent_id?}``. Loads-or-exports,\nmaps, chunks at 100/req, and writes via ``DirectClient.batch_remember``.\nReturns numeric summary only — no LLM narrative.",
+        "operationId": "migrate_import_api_ui_migrate_import_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "type": "object",
+                "title": "Body"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/": {
       "get": {
         "summary": "Root",
@@ -2366,6 +2660,29 @@
         "title": "ConflictResolveRequest",
         "description": "Request body for resolving a conflict"
       },
+      "ConversationMessage": {
+        "properties": {
+          "role": {
+            "type": "string",
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "Role"
+          },
+          "content": {
+            "type": "string",
+            "maxLength": 10000,
+            "minLength": 1,
+            "title": "Content"
+          }
+        },
+        "type": "object",
+        "required": [
+          "role",
+          "content"
+        ],
+        "title": "ConversationMessage",
+        "description": "Chat-style message used for conversation memory extraction."
+      },
       "DailySummaryRequest": {
         "properties": {
           "date": {
@@ -2395,6 +2712,52 @@
         },
         "type": "object",
         "title": "DailySummaryRequest"
+      },
+      "ExtractMemoriesRequest": {
+        "properties": {
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/ConversationMessage"
+            },
+            "type": "array",
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Messages",
+            "description": "Conversation turns to extract durable memories from"
+          },
+          "dry_run": {
+            "type": "boolean",
+            "title": "Dry Run",
+            "description": "When true, return candidates without storing them",
+            "default": false
+          },
+          "max_memories": {
+            "type": "integer",
+            "maximum": 100,
+            "minimum": 1,
+            "title": "Max Memories",
+            "description": "Maximum candidate memories to extract",
+            "default": 20
+          },
+          "ai_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Model",
+            "description": "Optional model override for extraction"
+          }
+        },
+        "type": "object",
+        "required": [
+          "messages"
+        ],
+        "title": "ExtractMemoriesRequest",
+        "description": "Request body for extracting typed memories from conversation turns."
       },
       "HTTPValidationError": {
         "properties": {
@@ -2436,6 +2799,85 @@
           "moorcheh_connected"
         ],
         "title": "HealthResponse"
+      },
+      "MemoryEditRequest": {
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "content": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 10000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1,
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tags"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          }
+        },
+        "type": "object",
+        "title": "MemoryEditRequest"
       },
       "MemoryItem": {
         "properties": {
