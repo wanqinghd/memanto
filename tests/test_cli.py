@@ -223,6 +223,7 @@ class TestMEMANTOCLI:
         assert result.exit_code == 0
         mock_all_clients.remember.assert_called_once()
         assert mock_all_clients.remember.call_args.kwargs["title"] == "Custom Title"
+
     def test_edit(self, mock_all_clients):
         """Test 'memanto edit' updates selected memory fields."""
         mock_all_clients.update_memory.return_value = {
