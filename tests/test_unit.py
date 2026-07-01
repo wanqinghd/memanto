@@ -331,6 +331,10 @@ class TestMemoryWriteServiceUpdate:
             namespace_name="memanto_agent_test-agent", ids=["mem-abc"]
         )
         client.documents.upload.assert_called_once()
+        document_call_names = [
+            method_call[0] for method_call in client.documents.method_calls
+        ]
+        assert document_call_names.index("delete") < document_call_names.index("upload")
 
 
 class TestForgetEndToEnd:
