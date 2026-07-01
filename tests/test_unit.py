@@ -288,6 +288,51 @@ class TestMemoryWriteServiceDelete:
         assert MemoryWriteService(client).delete_memory("m1", "ns") is expected
 
 
+class TestMemoryWriteServiceUpdate:
+    def test_update_memory_handles_onprem_delete_response_shape(self):
+        """``update_memory`` also deletes the old document before re-uploading.
+        It must accept the same on-prem delete response shape as forget."""
+        from memanto.app.services.memory_write_service import MemoryWriteService
+
+        client = MagicMock()
+        client.documents.get.return_value = {
+            "items": [
+                {
+                    "id": "mem-abc",
+                    "text": "[fact] Original title\n\nOriginal content",
+                    "metadata": {
+                        "memory_type": "fact",
+                        "agent_id": "test-agent",
+                        "actor_id": "human",
+                        "source": "manual",
+                        "confidence": 0.8,
+                        "status": "active",
+                        "tags": ["onprem"],
+                        "created_at": "2026-01-01T00:00:00+00:00",
+                    },
+                }
+            ]
+        }
+        client.documents.delete.return_value = {
+            "status": "success",
+            "deleted_ids": ["mem-abc"],
+        }
+        client.documents.upload.return_value = {"status": "success"}
+
+        result = MemoryWriteService(client).update_memory(
+            "mem-abc",
+            "memanto_agent_test-agent",
+            {"content": "Updated content"},
+        )
+
+        assert result["status"] == "success"
+        assert result["action"] == "updated"
+        client.documents.delete.assert_called_once_with(
+            namespace_name="memanto_agent_test-agent", ids=["mem-abc"]
+        )
+        client.documents.upload.assert_called_once()
+
+
 class TestForgetEndToEnd:
     """End-to-end ``forget`` flow through ``DirectClient``: create agent →
     activate → delete_memory. Asserts on-prem's response shape
