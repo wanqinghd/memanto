@@ -23,6 +23,18 @@ class MemoryWriteService:
         self.client = moorcheh_client
         self._parser = MemoryParsingService()
 
+    @staticmethod
+    def _deletion_processed(result: dict[str, Any]) -> bool:
+        """Return whether a Moorcheh delete response represents a processed delete."""
+        raw = result.get("actual_deletions")
+        if isinstance(raw, int):
+            return raw > 0
+        for key in ("deleted_ids", "requested_ids"):
+            ids = result.get(key)
+            if isinstance(ids, list):
+                return len(ids) > 0
+        return str(result.get("status", "")).lower() in {"success", "ok"}
+
     def store_memory(
         self, memory: MemoryRecord, context: dict[str, Any] | None = None
     ) -> dict[str, Any]:
@@ -311,7 +323,7 @@ class MemoryWriteService:
                 namespace_name=namespace, ids=[memory_id]
             )
 
-            if delete_result.get("actual_deletions", 0) == 0:
+            if not self._deletion_processed(delete_result):
                 raise MemoryError(f"Failed to delete old version of memory {memory_id}")
 
             validation_result = {"action": "store", "reason": "MVP direct store"}
@@ -342,7 +354,7 @@ class MemoryWriteService:
     def delete_memory(self, memory_id: str, namespace: str) -> bool:
         """Delete memory by ID"""
         try:
-            from typing import Any, cast
+            from typing import cast
 
             result = cast(
                 dict[str, Any],
@@ -352,15 +364,7 @@ class MemoryWriteService:
             # Cloud returns ``actual_deletions``; on-prem's /items/delete only
             # returns ``deleted_ids`` (and ``status``). Mirror the cloud SDK's
             # ``_deletion_processed_count`` so both backends report success.
-            raw = result.get("actual_deletions")
-            if isinstance(raw, int):
-                return raw > 0
-            for key in ("deleted_ids", "requested_ids"):
-                ids = result.get(key)
-                if isinstance(ids, list):
-                    return len(ids) > 0
-            # Some on-prem builds only return ``{"status": "success"}``.
-            return str(result.get("status", "")).lower() in {"success", "ok"}
+            return self._deletion_processed(result)
 
         except Exception as e:
             raise MemoryError(f"Failed to delete memory: {e}")
